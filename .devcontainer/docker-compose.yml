@@ -1,0 +1,25 @@
+version: "3.9"
+
+services:
+    db:
+        image: neo4j:latest
+        restart: unless-stopped
+        environment:
+            NEO4J_AUTH: neo4j/password
+        ports:
+            - "7474:7474"
+            - "7687:7687"
+        volumes:
+            - data:/data
+    workspace:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        volumes:
+            - ..:/workspace
+        command: sleep infinity
+        depends_on:
+            - db
+
+volumes:
+    data: {}
