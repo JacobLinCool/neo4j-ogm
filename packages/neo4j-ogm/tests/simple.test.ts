@@ -122,4 +122,12 @@ describe("simple", () => {
 		expect(jacob).toMatchObject({ ...JACOB, name: "Jacob Lin" });
 		expect(await jacob.$self()).toMatchObject({ ...JACOB, name: "Jacob Lin" });
 	});
+
+	test("update relation", async () => {
+		const follows_rel = await alice.FOLLOWS();
+		const since = new Date();
+		await follows_rel[0].$update({ since });
+		expect(follows_rel[0]).toMatchObject({ since });
+		expect(await follows_rel[0].$self()).toMatchObject({ since });
+	});
 });
