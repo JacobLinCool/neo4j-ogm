@@ -8,11 +8,6 @@ const NEO4J_PASSWORD = "password";
 
 const driver = neo4j.driver(NEO4J_URI, neo4j.auth.basic(NEO4J_USER, NEO4J_PASSWORD));
 
-afterAll(async () => {
-	await db.close();
-	await driver.close();
-});
-
 const db = new DB(driver)
 	.define("User", {
 		name: String(),
@@ -32,6 +27,11 @@ const db = new DB(driver)
 		size: BigInt(0),
 		UPLOADED_BY: ONE("User"),
 	});
+
+afterAll(async () => {
+	await db.close();
+	await driver.close();
+});
 
 describe("simple", () => {
 	const JACOB = {
@@ -115,5 +115,11 @@ describe("simple", () => {
 		expect(await uploaded_rel.$from()).toMatchObject(MEDIA);
 		expect(await uploaded_rel.$to()).toMatchObject(JACOB);
 		expect((await media.UPLOADED_BY()).$id).toEqual(uploaded_rel.$id);
+	});
+
+	test("update node", async () => {
+		await jacob.$update({ name: "Jacob Lin" });
+		expect(jacob).toMatchObject({ ...JACOB, name: "Jacob Lin" });
+		expect(await jacob.$self()).toMatchObject({ ...JACOB, name: "Jacob Lin" });
 	});
 });
