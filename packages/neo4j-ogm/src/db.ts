@@ -95,6 +95,22 @@ export class DB<Schema extends Graph = Empty> {
 		});
 	}
 
+	/** `n` is returned as a node */
+	_update(
+		$id: string,
+		data: Record<string, unknown>,
+		old?: Record<string, unknown>,
+	): Promise<QueryResult> {
+		return this.run(`MATCH (n) WHERE n.\`$id\` = $id SET n = $data RETURN n`, {
+			id: $id,
+			data: {
+				...old,
+				...data,
+				$id,
+			},
+		});
+	}
+
 	/** `r` is returned as a relation */
 	_link(
 		from: string,
@@ -113,6 +129,22 @@ export class DB<Schema extends Graph = Empty> {
 				},
 			},
 		);
+	}
+
+	/** `r` is returned as a relation */
+	_update_link(
+		$id: string,
+		data: Record<string, unknown>,
+		old?: Record<string, unknown>,
+	): Promise<QueryResult> {
+		return this.run(`MATCH ()-[r]-() WHERE r.\`$id\` = $id SET r = $data RETURN r`, {
+			id: $id,
+			data: {
+				...old,
+				...data,
+				$id,
+			},
+		});
 	}
 
 	async add<N extends keyof Schema>(
@@ -216,6 +248,21 @@ export class DB<Schema extends Graph = Empty> {
 			$id: props.$id,
 			$self: async () => this.fetch({ $id: props.$id }, node.labels[0] as any),
 			$schema: schema,
+			$update: async (data: Partial<Record<string, unknown>>) => {
+				const result = await this._update(props.$id, data, props);
+
+				const item = result.records[0].get("n");
+				const new_props = convert.js(item.properties);
+				for (const key in new_props) {
+					if (key === "$id") {
+						continue;
+					}
+					// @ts-expect-error
+					vertex[key] = props[key] = new_props[key];
+				}
+
+				return vertex;
+			},
 		});
 
 		return vertex;
@@ -259,6 +306,20 @@ export class DB<Schema extends Graph = Empty> {
 				const result = await this._fetch(to);
 				const n = result.records[0].get("n");
 				return this.vertexify(n, n.labels[0]);
+			},
+			$update: async (data: Partial<Record<string, unknown>>) => {
+				const result = await this._update_link(props.$id, data, props);
+
+				const item = result.records[0].get("r");
+				const new_props = convert.js(item.properties);
+				for (const key in new_props) {
+					if (key === "$id") {
+						continue;
+					}
+					rel[key] = props[key] = new_props[key];
+				}
+
+				return rel;
 			},
 		});
 

@@ -70,6 +70,10 @@ export type Vertex<
 	readonly $self: () => Promise<Vertex<GraphSchema, Node>>;
 	/** The schema of this vertex */
 	readonly $schema: Schema;
+	/** Update the vertex in the database */
+	readonly $update: (
+		props: Partial<VertexProps<GraphSchema, Node>>,
+	) => Promise<Vertex<GraphSchema, Node>>;
 } & {
 	[K in keyof Schema as Schema[K] extends ManyRelations ? K : never]: (() => Promise<
 		Relation<GraphSchema, Node, K extends keyof GraphSchema[Node] ? K : never>[]
@@ -146,6 +150,8 @@ export type Relation<
 	readonly $self: () => Promise<Relation<GraphSchema, From, Name>>;
 	/** The schema of this relation */
 	readonly $schema: Schema;
+	/** Update the relation in the database */
+	readonly $update: (props: Partial<Schema>) => Promise<Relation<GraphSchema, From, Name>>;
 
 	/** The source vertex of this relation */
 	readonly $from: () => Promise<Vertex<GraphSchema, From>>;
