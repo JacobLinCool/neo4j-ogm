@@ -130,4 +130,51 @@ describe("simple", () => {
 		expect(follows_rel[0]).toMatchObject({ since });
 		expect(await follows_rel[0].$self()).toMatchObject({ since });
 	});
+
+	describe("find node", () => {
+		test("find by label", async () => {
+			const users = await db.find("User");
+			expect(users).toHaveLength(2);
+		});
+
+		test("find by label and prop", async () => {
+			const users = await db.find("User", {
+				where: { name: "Jacob Lin" },
+			});
+			expect(users).toHaveLength(1);
+		});
+
+		test("sort by name", async () => {
+			const users = await db.find("User", {
+				order: ["name", "ASC"],
+			});
+			expect(users[0]).toMatchObject(ALICE);
+			expect(users[1].name).toEqual("Jacob Lin");
+		});
+
+		test("sort by name and email", async () => {
+			const users = await db.find("User", {
+				order: [
+					["name", "DESC"],
+					["email", "ASC"],
+				],
+			});
+			expect(users[0].name).toEqual("Jacob Lin");
+			expect(users[1]).toMatchObject(ALICE);
+		});
+
+		test("limit results", async () => {
+			const users = await db.find("User", {
+				limit: 1,
+			});
+			expect(users).toHaveLength(1);
+		});
+
+		test("no matched", async () => {
+			const users = await db.find("User", {
+				where: { name: "" },
+			});
+			expect(users).toHaveLength(0);
+		});
+	});
 });
