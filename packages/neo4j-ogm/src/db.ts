@@ -2,7 +2,7 @@ import cuid from "cuid";
 import debug from "debug";
 import type { Session, Driver, Node, Relationship, QueryResult } from "neo4j-driver";
 import { convert } from "./convert";
-import type { Empty, Graph, GraphNode, Prop, PropOnly, Vertex } from "./types";
+import type { Empty, Graph, GraphNode, Prop, PropOnly, Vertex, OneOrMany } from "./types";
 
 export class DB<Schema extends Graph = Empty> {
 	/** This id (`$id`) generator function, defaults to cuid */
@@ -153,6 +153,42 @@ export class DB<Schema extends Graph = Empty> {
 	): Promise<Vertex<Schema, N>> {
 		const result = await this._add(String(label), data);
 		return this.vertexify(result.records[0].get("n"), label);
+	}
+
+	async find<N extends keyof Schema>(
+		label: N,
+		query?: {
+			where?: Partial<PropOnly<Schema[N]>>;
+			limit?: number;
+			order?: OneOrMany<[keyof PropOnly<Schema[N]>, "ASC" | "DESC"]>;
+		},
+	): Promise<Vertex<Schema, N>[]> {
+		let statement = `MATCH (n:${String(label)})`;
+
+		if (query?.where) {
+			const fields = Object.keys(query.where);
+			statement += ` WHERE ${fields
+				.map((f) => `n.${String(f)} = $where.${String(f)}`)
+				.join(" AND ")}`;
+		}
+
+		statement += ` RETURN n`;
+
+		if (query?.order) {
+			const fields = (Array.isArray(query.order[0]) ? query.order : [query.order]) as [
+				keyof PropOnly<Schema[N]>,
+				"ASC" | "DESC",
+			][];
+
+			statement += ` ORDER BY ${fields.map(([f, d]) => `n.${String(f)} ${d}`).join(", ")}`;
+		}
+
+		if (query?.limit) {
+			statement += ` LIMIT ${query.limit}`;
+		}
+
+		const result = await this.run(statement, { where: query?.where || {} });
+		return result.records.map((r) => this.vertexify(r.get("n"), label));
 	}
 
 	async fetch<N extends keyof Schema>(

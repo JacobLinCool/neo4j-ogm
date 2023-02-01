@@ -5,6 +5,8 @@ export type Prop = string | number | bigint | boolean | Date | Prop[];
 
 export type Empty = Record<never, never>;
 
+export type OneOrMany<T> = T | T[];
+
 export type GraphNode = {
 	[id: string]: Prop | OneRelation | ManyRelations;
 };
