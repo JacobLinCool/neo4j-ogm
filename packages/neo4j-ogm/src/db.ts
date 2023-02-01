@@ -5,6 +5,9 @@ import { convert } from "./convert";
 import type { Empty, Graph, GraphNode, Prop, PropOnly, Vertex } from "./types";
 
 export class DB<Schema extends Graph = Empty> {
+	/** This id (`$id`) generator function, defaults to cuid */
+	public idgen: () => string = cuid;
+	/** The underlying sessions */
 	public readonly sessions: Session[];
 	protected session_index = 0;
 	protected _defs: Record<keyof Schema, GraphNode> = {} as any;
@@ -12,6 +15,10 @@ export class DB<Schema extends Graph = Empty> {
 		query: debug.Debugger;
 	};
 
+	/**
+	 * @param driver The neo4j driver
+	 * @param options The database to use and the number of sessions to use
+	 */
 	constructor(driver: Driver, { database = "neo4j", concurrency = 5 } = {}) {
 		this.sessions = Array.from({ length: concurrency }, () => driver.session({ database }));
 
@@ -83,7 +90,7 @@ export class DB<Schema extends Graph = Empty> {
 		return this.run(`CREATE (n:${label} $data) RETURN n`, {
 			data: {
 				...data,
-				$id: cuid(),
+				$id: this.idgen(),
 			},
 		});
 	}
@@ -102,7 +109,7 @@ export class DB<Schema extends Graph = Empty> {
 				to,
 				data: {
 					...data,
-					$id: cuid(),
+					$id: this.idgen(),
 				},
 			},
 		);
