@@ -1,16 +1,19 @@
 import cuid from "cuid";
 import debug from "debug";
 import type { Session, Driver, Node, Relationship, QueryResult } from "neo4j-driver";
+import { z } from "zod";
 import { convert } from "./convert";
-import type { Empty, Graph, GraphNode, Prop, PropOnly, Vertex, OneOrMany } from "./types";
+import { NodeShape, RelationShape } from "./shape";
+import { Empty, FullGraph, Vertex, OneOrMany, vertexify, PropValue } from "./types";
 
-export class DB<Schema extends Graph = Empty> {
+export class DB<Schema extends FullGraph = Empty> {
 	/** This id (`$id`) generator function, defaults to cuid */
 	public idgen: () => string = cuid;
+	public readonly driver: Driver;
+	public readonly database: string;
 	/** The underlying sessions */
-	public readonly sessions: Session[];
-	protected session_index = 0;
-	protected _defs: Record<keyof Schema, GraphNode> = {} as any;
+	public readonly sessions = new Set<Session>();
+	public defs: Record<keyof Schema, NodeShape> = {} as any;
 	protected log: {
 		query: debug.Debugger;
 	};
@@ -19,8 +22,9 @@ export class DB<Schema extends Graph = Empty> {
 	 * @param driver The neo4j driver
 	 * @param options The database to use and the number of sessions to use
 	 */
-	constructor(driver: Driver, { database = "neo4j", concurrency = 5 } = {}) {
-		this.sessions = Array.from({ length: concurrency }, () => driver.session({ database }));
+	constructor(driver: Driver, { database = "neo4j" } = {}) {
+		this.driver = driver;
+		this.database = database;
 
 		const dbg = debug("db");
 		this.log = {
@@ -34,12 +38,23 @@ export class DB<Schema extends Graph = Empty> {
 	 * @param schema The schema of the node type
 	 * @returns Self, for chaining
 	 */
-	public define<N extends string, T extends GraphNode>(
+	public define<N extends string>(name: N): DB<Schema & { [k in N]: NodeShape<N> }>;
+	public define<N extends string, L extends readonly string[]>(
 		name: N,
-		schema: T,
-	): DB<Schema & { [k in N]: T }> {
-		this._defs[name] = schema;
+		labels: L,
+	): DB<Schema & { [k in N]: NodeShape<N, L> }>;
+	public define<N extends string, P extends Record<string, PropValue | RelationShape>>(
+		name: N,
+		props: P,
+	): DB<Schema & { [k in N]: NodeShape<N, [], P> }>;
+	public define<
+		N extends string,
+		L extends readonly string[],
+		P extends Record<string, PropValue | RelationShape>,
+	>(name: N, labels: L, props: P): DB<Schema & { [k in N]: NodeShape<N, L, P> }>;
+	public define(...args: any[]): any {
 		// @ts-expect-error
+		this.defs[args[0]] = new NodeShape(...args);
 		return this;
 	}
 
@@ -47,7 +62,7 @@ export class DB<Schema extends Graph = Empty> {
 	 * Close all underlying sessions
 	 */
 	public async close() {
-		await Promise.all(this.sessions.map((s) => s.close()));
+		await Promise.all([...this.sessions.values()].map((s) => s.close()));
 	}
 
 	/**
@@ -57,10 +72,11 @@ export class DB<Schema extends Graph = Empty> {
 	 */
 	public async run(query: string, params?: Record<string, unknown>): Promise<QueryResult> {
 		this.log.query(query, params);
-		const result = await this.sessions[this.session_index++ % this.sessions.length].run(
-			query,
-			convert.neo4j(params),
-		);
+		const session = this.driver.session({ database: this.database });
+		this.sessions.add(session);
+		const result = await session.run(query, convert.neo4j(params)).finally(() => {
+			session.close().then(() => this.sessions.delete(session));
+		});
 		this.log.query("result", result);
 		return result;
 	}
@@ -86,12 +102,11 @@ export class DB<Schema extends Graph = Empty> {
 	}
 
 	/** `n` is returned as a node */
-	_add(label: string, data: Record<string, unknown>): Promise<QueryResult> {
-		return this.run(`CREATE (n:${label} $data) RETURN n`, {
-			data: {
-				...data,
-				$id: this.idgen(),
-			},
+	_create(label: string, data: OneOrMany<Record<string, unknown>>): Promise<QueryResult> {
+		return this.run(`UNWIND $props AS props CREATE (n:${label}) SET n = props RETURN n`, {
+			props: Array.isArray(data)
+				? data.map((d) => ({ ...d, $id: this.idgen() }))
+				: [{ ...data, $id: this.idgen() }],
 		});
 	}
 
@@ -147,20 +162,32 @@ export class DB<Schema extends Graph = Empty> {
 		});
 	}
 
-	async add<N extends keyof Schema>(
-		label: N,
-		data: PropOnly<Schema[N]>,
-	): Promise<Vertex<Schema, N>> {
-		const result = await this._add(String(label), data);
-		return this.vertexify(result.records[0].get("n"), label);
+	/**
+	 * Create a new node
+	 * @returns This will always return an array, even if only one node was created
+	 */
+	async create<T extends keyof Schema>(
+		type: T,
+		data: OneOrMany<{
+			[K in keyof Schema[T]["props"]]: Schema[T]["props"][K] extends z.ZodType
+				? z.infer<Schema[T]["props"][K]>
+				: never;
+		}>,
+	): Promise<Vertex<Schema, T>[]> {
+		const result = await this._create(String(type), data);
+		return result.records.map((r) => this.vertexify(r.get("n"), type));
 	}
 
 	async find<N extends keyof Schema>(
 		label: N,
 		query?: {
-			where?: Partial<PropOnly<Schema[N]>>;
+			where?: Partial<{
+				[K in keyof Schema[N]["props"]]: Schema[N]["props"][K] extends z.ZodType
+					? z.infer<Schema[N]["props"][K]>
+					: never;
+			}> & { $id?: string };
 			limit?: number;
-			order?: OneOrMany<[keyof PropOnly<Schema[N]>, "ASC" | "DESC"]>;
+			order?: OneOrMany<[keyof Schema[N]["props"], "ASC" | "DESC"]>;
 		},
 	): Promise<Vertex<Schema, N>[]> {
 		let statement = `MATCH (n:${String(label)})`;
@@ -176,7 +203,7 @@ export class DB<Schema extends Graph = Empty> {
 
 		if (query?.order) {
 			const fields = (Array.isArray(query.order[0]) ? query.order : [query.order]) as [
-				keyof PropOnly<Schema[N]>,
+				keyof Schema[N]["props"],
 				"ASC" | "DESC",
 			][];
 
@@ -200,165 +227,6 @@ export class DB<Schema extends Graph = Empty> {
 	}
 
 	vertexify<N extends keyof Schema>(node: Node, name: N): Vertex<Schema, N> {
-		const props = convert.js(node.properties);
-		const schema = this._defs[name];
-		// @ts-expect-error - will add other properties to this object later
-		const vertex: Vertex<Schema, N> = {};
-		for (const key in schema) {
-			const prop = schema[key];
-			if (typeof prop === "object" && "$rel" in prop) {
-				if (prop.$rel === "many") {
-					// @ts-expect-error
-					vertex[key] = async (
-						target?: Vertex<any, any>,
-						data?: Record<never, never>,
-					) => {
-						if (target) {
-							const result = await this._link(props.$id, target.$id, key, data || {});
-							return this.relationify(
-								result.records[0].get("r"),
-								prop.schema as any,
-								result.records[0].get("from"),
-								result.records[0].get("to"),
-							);
-						} else {
-							const result = await this.run(
-								`MATCH (n)-[r:${key}]->(m) WHERE n.\`$id\` = $id RETURN r, n.\`$id\` as from, m.\`$id\` as to`,
-								{
-									id: props.$id,
-								},
-							);
-
-							const relations = [];
-							for await (const record of result.records) {
-								relations.push(
-									this.relationify(
-										record.get("r"),
-										prop.schema as any,
-										record.get("from"),
-										record.get("to"),
-									),
-								);
-							}
-
-							return relations;
-						}
-					};
-				} else {
-					// @ts-expect-error
-					vertex[key] = async (
-						target?: Vertex<any, any>,
-						data?: Record<never, never>,
-					) => {
-						if (target) {
-							const result = await this._link(props.$id, target.$id, key, data || {});
-							return this.relationify(
-								result.records[0].get("r"),
-								prop.schema as any,
-								result.records[0].get("from"),
-								result.records[0].get("to"),
-							);
-						} else {
-							const result = await this.run(
-								`MATCH (n)-[r:${key}]->(m) WHERE n.\`$id\` = $id RETURN r, n.\`$id\` as from, m.\`$id\` as to`,
-								{
-									id: props.$id,
-								},
-							);
-
-							return this.relationify(
-								result.records[0].get("r"),
-								prop.schema as any,
-								result.records[0].get("from"),
-								result.records[0].get("to"),
-							);
-						}
-					};
-				}
-			} else {
-				vertex[key] = props[key];
-			}
-		}
-
-		Object.assign(vertex, {
-			$id: props.$id,
-			$self: async () => this.fetch({ $id: props.$id }, node.labels[0] as any),
-			$schema: schema,
-			$update: async (data: Partial<Record<string, unknown>>) => {
-				const result = await this._update(props.$id, data, props);
-
-				const item = result.records[0].get("n");
-				const new_props = convert.js(item.properties);
-				for (const key in new_props) {
-					if (key === "$id") {
-						continue;
-					}
-					// @ts-expect-error
-					vertex[key] = props[key] = new_props[key];
-				}
-
-				return vertex;
-			},
-		});
-
-		return vertex;
-	}
-
-	relationify<RelSchema extends Record<string, Prop>>(
-		relation: Relationship,
-		schema: RelSchema,
-		from: string,
-		to: string,
-	): unknown {
-		const props = convert.js(relation.properties);
-
-		const rel = {
-			...props,
-		} as Record<string, unknown>;
-
-		Object.assign(rel, {
-			$id: props.$id,
-			$self: async () => {
-				const result = await this.run(
-					"MATCH (n)-[r]->(m) WHERE r.`$id` = $id RETURN r, n.`$id` as from, m.`$id` as to",
-					{
-						id: props.$id,
-					},
-				);
-				return this.relationify(
-					result.records[0].get("r"),
-					schema,
-					result.records[0].get("from"),
-					result.records[0].get("to"),
-				);
-			},
-			$schema: schema,
-			$from: async () => {
-				const result = await this._fetch(from);
-				const n = result.records[0].get("n");
-				return this.vertexify(n, n.labels[0]);
-			},
-			$to: async () => {
-				const result = await this._fetch(to);
-				const n = result.records[0].get("n");
-				return this.vertexify(n, n.labels[0]);
-			},
-			$update: async (data: Partial<Record<string, unknown>>) => {
-				const result = await this._update_link(props.$id, data, props);
-
-				const item = result.records[0].get("r");
-				const new_props = convert.js(item.properties);
-				for (const key in new_props) {
-					if (key === "$id") {
-						continue;
-					}
-					rel[key] = props[key] = new_props[key];
-				}
-
-				return rel;
-			},
-		});
-
-		return rel;
+		return vertexify(this, name, node);
 	}
 }

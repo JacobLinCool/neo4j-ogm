@@ -6,9 +6,9 @@ export const convert = {
 		if (value instanceof Date) {
 			return types.DateTime.fromStandardDate(value);
 		}
-		if (typeof value === "bigint") {
-			return types.Integer.fromString(value.toString());
-		}
+		// if (typeof value === "bigint") {
+		// 	return types.Integer.fromString(value.toString());
+		// }
 		if (Array.isArray(value)) {
 			return value.slice().map(convert.neo4j);
 		}

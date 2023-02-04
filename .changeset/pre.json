@@ -1,0 +1,9 @@
+{
+	"mode": "pre",
+	"tag": "dev",
+	"initialVersions": {
+		"neo4j-ogm": "0.0.0",
+		"typed-cypher": "0.0.0"
+	},
+	"changesets": []
+}
