@@ -28,7 +28,7 @@
 		"@types/debug": "^4.1.7",
 		"@types/node-fetch": "^2.6.2",
 		"course-pack": "1.0.0-alpha.14",
-		"node-fetch": "^2.6.7",
+		"node-fetch": "^3.0.0",
 		"ora": "^5.4.1",
 		"tsup": "^6.5.0",
 		"typedoc": "^0.23.24",
