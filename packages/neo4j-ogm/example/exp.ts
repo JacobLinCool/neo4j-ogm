@@ -55,7 +55,7 @@ async function main() {
 	spinner.succeed("Course pack verified");
 
 	spinner.start("Creating teachers");
-	const teachers = await db.add(
+	const teachers = await db.create(
 		"Teacher",
 		unique(pack.teachers, "name").map(({ name }) => ({ name })),
 	);
@@ -65,7 +65,7 @@ async function main() {
 	spinner.succeed("Teachers created");
 
 	spinner.start("Creating programs");
-	const programs = await db.add(
+	const programs = await db.create(
 		"Program",
 		unique(pack.programs, "name").map(({ name }) => ({ name })),
 	);
@@ -77,14 +77,14 @@ async function main() {
 	const provider_map = new Map<string, Vertex<Schema, "Provider">>();
 	const course_map = new Map<string, Vertex<Schema, "Course">>();
 	const dummy: PackedEntity = { name: "Root Provider", children: pack.entities, courses: [] };
-	providers.push(...(await db.add("Provider", { name: dummy.name })));
+	providers.push(...(await db.create("Provider", { name: dummy.name })));
 	provider_map.set(dummy.name, providers[0]);
 	const queue = [dummy];
 	while (queue.length > 0) {
 		const node = queue.shift();
 		if (node) {
 			const vertex = provider_map.get(node.name);
-			const children = await db.add(
+			const children = await db.create(
 				"Provider",
 				node.children.map((child) => ({ name: child.name })),
 			);
@@ -97,7 +97,7 @@ async function main() {
 			}
 
 			const siblings = new Set<string>();
-			const new_courses = await db.add(
+			const new_courses = await db.create(
 				"Course",
 				node.courses
 					.filter((course) => {
