@@ -1,5 +1,12 @@
 # neo4j-ogm
 
+## 1.0.0-dev.1
+
+### Patch Changes
+
+-   Updated dependencies [[`6923f48`](https://github.com/JacobLinCool/neo4j-ogm/commit/6923f48c1739226e8cf98c7a632486e2f47c2442)]:
+    -   typed-cypher@1.0.0-dev.1
+
 ## 1.0.0-dev.0
 
 ### Major Changes
