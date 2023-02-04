@@ -13,7 +13,7 @@
 	],
 	"scripts": {
 		"build": "tsup",
-		"x:build:docs": "typedoc --out docs src"
+		"build:docs": "typedoc --out docs src"
 	},
 	"dependencies": {
 		"type-fest": "^3.5.4"
