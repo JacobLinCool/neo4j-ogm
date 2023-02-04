@@ -30,5 +30,8 @@
 	"bugs": {
 		"url": "https://github.com/JacobLinCool/neo4j-ogm/issues"
 	},
-	"homepage": "https://jacoblincool.github.io/neo4j-ogm"
+	"homepage": "https://jacoblincool.github.io/neo4j-ogm",
+	"typedoc": {
+		"entryPoint": "./src/index.ts"
+	}
 }
