@@ -1,7 +1,7 @@
 {
 	"name": "neo4j-ogm",
 	"description": "Neo4j OGM for TypeScript / JavaScript",
-	"version": "1.0.0-dev.0",
+	"version": "1.0.0-dev.1",
 	"author": "JacobLinCool <jacoblincool@gmail.com> (https://jacoblin.cool)",
 	"license": "MIT",
 	"keywords": [],

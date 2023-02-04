@@ -5,5 +5,5 @@
 		"neo4j-ogm": "0.0.0",
 		"typed-cypher": "0.0.0"
 	},
-	"changesets": ["custom-id", "define-model", "find-node", "typed-cypher"]
+	"changesets": ["custom-id", "define-model", "fair-walls-destroy", "find-node", "typed-cypher"]
 }
