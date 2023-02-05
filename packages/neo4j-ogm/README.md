@@ -2,6 +2,11 @@
 
 Neo4j OGM for TypeScript / JavaScript
 
+## Fetures
+
+- [x] Type-safe query
+- [ ] OGM
+
 ## Usage
 
 ### Define models

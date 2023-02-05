@@ -1,6 +1,7 @@
 import cuid from "cuid";
 import debug from "debug";
-import type { Session, Driver, Node, Relationship, QueryResult } from "neo4j-driver";
+import type { Session, Driver, Node, QueryResult, Relationship } from "neo4j-driver";
+import { Params, Returns } from "typed-cypher";
 import { z } from "zod";
 import { convert } from "./convert";
 import { NodeShape, RelationShape } from "./shape";
@@ -66,10 +67,28 @@ export class DB<Schema extends FullGraph = Empty> {
 	}
 
 	/**
-	 * Run a raw query
+	 * Run a typed raw query
 	 * @param query Query in Cypher
 	 * @param params Parameters to pass to the query
 	 */
+	public async run<Q extends string>(
+		query: Q,
+		...params: keyof Params<Q> extends never ? [Record<string, unknown>?] : [Params<Q>]
+	): Promise<
+		QueryResult<
+			keyof Returns<Q> extends never
+				? {
+						[key: string]: unknown;
+				  }
+				: {
+						[key in keyof Returns<Q>]: Returns<Q>[key] extends "Node"
+							? Node
+							: Returns<Q>[key] extends "Relationship"
+							? Relationship
+							: unknown;
+				  }
+		>
+	>;
 	public async run(query: string, params?: Record<string, unknown>): Promise<QueryResult> {
 		this.log.query(query, params);
 		const session = this.driver.session({ database: this.database });
@@ -95,14 +114,17 @@ export class DB<Schema extends FullGraph = Empty> {
 	}
 
 	/** `n` is returned as a node */
-	_fetch($id: string): Promise<QueryResult> {
+	_fetch($id: string): Promise<QueryResult<{ n: Node }>> {
 		return this.run("MATCH (n) WHERE n.`$id` = $id RETURN n", {
 			id: $id,
 		});
 	}
 
 	/** `n` is returned as a node */
-	_create(label: string, data: OneOrMany<Record<string, unknown>>): Promise<QueryResult> {
+	_create(
+		label: string,
+		data: OneOrMany<Record<string, unknown>>,
+	): Promise<QueryResult<{ n: Node }>> {
 		return this.run(`UNWIND $props AS props CREATE (n:${label}) SET n = props RETURN n`, {
 			props: Array.isArray(data)
 				? data.map((d) => ({ ...d, $id: this.idgen() }))
@@ -115,7 +137,7 @@ export class DB<Schema extends FullGraph = Empty> {
 		$id: string,
 		data: Record<string, unknown>,
 		old?: Record<string, unknown>,
-	): Promise<QueryResult> {
+	): Promise<QueryResult<{ n: Node }>> {
 		return this.run(`MATCH (n) WHERE n.\`$id\` = $id SET n = $data RETURN n`, {
 			id: $id,
 			data: {
@@ -132,7 +154,7 @@ export class DB<Schema extends FullGraph = Empty> {
 		to: string,
 		rel: string,
 		data: Record<string, unknown>,
-	): Promise<QueryResult> {
+	): Promise<QueryResult<{ r: Relationship; from: unknown; to: unknown }>> {
 		return this.run(
 			`MATCH (n), (m) WHERE n.\`$id\` = $from AND m.\`$id\` = $to CREATE (n)-[r:${rel} $data]->(m) RETURN r, $from as from, $to as to`,
 			{
@@ -151,7 +173,7 @@ export class DB<Schema extends FullGraph = Empty> {
 		$id: string,
 		data: Record<string, unknown>,
 		old?: Record<string, unknown>,
-	): Promise<QueryResult> {
+	): Promise<QueryResult<{ r: Relationship }>> {
 		return this.run(`MATCH ()-[r]-() WHERE r.\`$id\` = $id SET r = $data RETURN r`, {
 			id: $id,
 			data: {
@@ -215,7 +237,7 @@ export class DB<Schema extends FullGraph = Empty> {
 		}
 
 		const result = await this.run(statement, { where: query?.where || {} });
-		return result.records.map((r) => this.vertexify(r.get("n"), label));
+		return result.records.map((r) => this.vertexify(r.get("n") as Node, label));
 	}
 
 	async fetch<N extends keyof Schema>(
