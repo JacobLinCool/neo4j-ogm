@@ -1,5 +1,11 @@
 # neo4j-ogm
 
+## 1.0.0-dev.2
+
+### Minor Changes
+
+-   [`4b6f34f`](https://github.com/JacobLinCool/neo4j-ogm/commit/4b6f34f861c4b73cee4b34ee55e73fdc2e58debe) Thanks [@JacobLinCool](https://github.com/JacobLinCool)! - Auto inference params and returns of `db.run`
+
 ## 1.0.0-dev.1
 
 ### Patch Changes
