@@ -19,7 +19,7 @@
 		"cuid": "^3.0.0",
 		"debug": "^4.3.4",
 		"neo4j-driver": "^5.0.0",
-		"type-fest": "^3.5.4",
+		"type-fest": "^4.0.0",
 		"typed-cypher": "workspace:*",
 		"zod": "^3.20.2"
 	},
