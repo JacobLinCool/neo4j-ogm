@@ -16,7 +16,7 @@
 		"build:docs": "typedoc --out docs src"
 	},
 	"dependencies": {
-		"type-fest": "^3.5.4"
+		"type-fest": "^4.0.0"
 	},
 	"devDependencies": {
 		"tsup": "^6.5.0",
